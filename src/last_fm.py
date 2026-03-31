@@ -121,34 +121,113 @@ def get_user_top_tracks(user: str, limit: int = 200, time_period: TimePeriod = T
     return tracks, playcounts, r.json()['toptracks']["@attr"]
 
 
-def get_album_tracks(album: Album, limit: int = 10):
-    if album.mbid is None:
-        payload = {
-            "album": album.name,
-            "artist": album.artist_name,
-            'limit': limit,
-            'api_key': API_KEY,
-            'method': 'album.getinfo',
-            'format': 'json'
-        }
-    else:
-        payload = {
-            "mbid": album.mbid,
-            'limit': limit,
-            'api_key': API_KEY,
-            'method': 'album.getinfo',
-            'format': 'json'
-        }
+def get_user_recent_tracks(user: str, limit: int = 20):
+    payload = {
+        'user': user,
+        'limit': limit,
+        'api_key': API_KEY,
+        'method': 'user.getrecenttracks',
+        'format': 'json'
+    }
 
     r = requests.get('https://ws.audioscrobbler.com/2.0/', headers=HEADERS, params=payload)
+
     tracks = []
-    for track in r.json()["album"]["tracks"]["track"]:
+    albums = []
+    for track in r.json()["recenttracks"]["track"]:
         tracks.append(Track(
+            name=track["name"],
+            url=track["url"],
+            images=track["image"],
+            artist_url=track["artist"].get("url", ""),
+            artist_name=track["artist"].get("#text", ""),
+            mbid = track.get("mbid", None),
+        ))
+
+        album_found = Album(
+            name=track["album"].get("#text", ""),
+            mbid=track["album"].get("mbid", None),
+            artist_name=track["artist"].get("#text", ""),
+            images=track.get("image", []),
+            # TODO do we need to get these?
+            url="",
+            artist_url=""
+        )
+        if album_found not in albums:
+            albums.append(album_found)
+
+
+    return tracks, albums, r.json()['recenttracks']["@attr"]
+
+
+def get_album_tracks(album: Album, limit: int = 10):
+    payload = {
+        "album": album.name,
+        "artist": album.artist_name,
+        'limit': limit,
+        'api_key': API_KEY,
+        'method': 'album.getinfo',
+        'format': 'json'
+    }
+    if album.mbid is not None:
+        payload["mbid"] = album.mbid
+
+    r = requests.get('https://ws.audioscrobbler.com/2.0/', headers=HEADERS, params=payload)
+
+    if "album" not in r.json() or "tracks" not in r.json()["album"]:
+        return []
+
+    try:
+        tracks = []
+        for track in r.json()["album"]["tracks"]["track"]:
+            tracks.append(Track(
+                name=track["name"],
+                url=track["url"],
+                images=track.get("image", []),
+                artist_url=track["artist"]["url"],
+                artist_name=track["artist"]["name"],
+                mbid=track.get("mbid", None),
+            ))
+        return tracks
+    # If the album is a single then last fm sends back a different datatype
+    except TypeError:
+        track = r.json()["album"]["tracks"]["track"]
+        return [Track(
             name=track["name"],
             url=track["url"],
             images=track.get("image", []),
             artist_url=track["artist"]["url"],
             artist_name=track["artist"]["name"],
             mbid=track.get("mbid", None),
-        ))
-    return tracks
+        )]
+
+
+def is_single(album: Album):
+    return len(get_album_tracks(album)) <= 1
+
+
+def find_album_from_track(track: Track, user: str):
+    payload = {
+        'user': user,
+        'track': track.name,
+        'artist': track.artist_name,
+        'api_key': API_KEY,
+        'method': 'track.getinfo',
+        'format': 'json'
+    }
+
+    r = requests.get('https://ws.audioscrobbler.com/2.0/', headers=HEADERS, params=payload)
+
+    if "album" not in r.json()["track"]:
+        return None, -1
+
+    album = Album(
+        name = r.json()["track"]["album"]["title"],
+        artist_url = r.json()["track"]["artist"]["url"],
+        artist_name = r.json()["track"]["artist"]["name"],
+        images = r.json()["track"]["album"].get("image", []),
+        url = r.json()["track"]["album"].get("url", ""),
+        mbid = r.json()["track"]["album"].get("mbid", None),
+    )
+
+    return album, r.json()["track"]["userplaycount"]

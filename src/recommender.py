@@ -15,35 +15,29 @@ API_KEY = get_last_fm_api_details().api_key
 HEADERS = {'user-agent':USER_AGENT,}
 
 def get_similar_tracks(track: Track, limit: int = 10):
+    payload = {
+        'limit': limit,
+        'api_key': API_KEY,
+        'method': 'track.getsimilar',
+        'format': 'json'
+    }
     if track.mbid is None:
-        payload = {
-            "track": track.name,
-            "artist": track.artist_name,
-            'limit': limit,
-            'api_key': API_KEY,
-            'method': 'track.getsimilar',
-            'format': 'json'
-        }
+        payload["track"] = track.name
+        payload["artist"] = track.artist_name
     else:
-        payload = {
-            "mbid": track.mbid,
-            'limit': limit,
-            'api_key': API_KEY,
-            'method': 'track.getsimilar',
-            'format': 'json'
-        }
+        payload["mbid"] =  track.mbid
 
     r = requests.get('https://ws.audioscrobbler.com/2.0/', headers=HEADERS, params=payload)
     tracks = list(map(
-        lambda track: Track(
-            name=track["name"],
-            url=track["url"],
-            images=track["image"],
-            artist_url=track["artist"]["url"],
-            artist_name=track["artist"]["name"],
-            mbid=track.get("mbid", None),
+        lambda t: Track(
+            name=t["name"],
+            url=t["url"],
+            images=t["image"],
+            artist_url=t["artist"]["url"],
+            artist_name=t["artist"]["name"],
+            mbid=t.get("mbid", None),
         ),
-        r.json()["similartracks"]['track']))
+        r.json().get("similartracks", {"track": []}).get('track', [])))
     return tracks
 
 

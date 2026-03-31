@@ -14,3 +14,10 @@ def get_last_fm_api_details(config_location: str = "config.ini") -> LastFMDetail
     shared_secret = config.get("LastFM", "SHARED_SECRET")
 
     return LastFMDetails(api_key, shared_secret)
+
+
+def get_username(config_location: str = "config.ini") -> str:
+    config = configparser.ConfigParser()
+    config.read(config_location)
+    username = config.get("LastFM", "USERNAME")
+    return username
